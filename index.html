@@ -4,92 +4,317 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>GCC VIN Spareparts Finder</title>
+<meta name="description" content="Quickly find spare parts for GCC-spec vehicles by Brand, Model or VIN. Powered by Partsouq Auto Parts." />
+
 <style>
-  body{margin:0;background:#f4f6f9;font-family:Arial;padding:22px;color:#0b2540}
-  .wrap{max-width:1100px;margin:auto}
-  table{width:100%;border-collapse:collapse;background:#fff;border-radius:10px;overflow:hidden}
-  thead th{background:#eef4fb;padding:10px;text-align:left;font-size:14px}
-  tbody td{padding:10px;border-bottom:1px solid #f0f3f7;font-size:14px}
-  .btn{background:#0ea5ff;color:#fff;padding:8px 12px;border-radius:8px;border:none;cursor:pointer}
-  #search{padding:8px;width:100%;margin-bottom:12px;border-radius:8px;border:1px solid #ccd8e5}
-  .linkbtn{padding:6px 10px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px;font-weight:600}
+  :root {
+    --primary: #0ea5ff;
+    --primary-dark: #2563eb;
+    --bg: #f4f6f9;
+    --card: #ffffff;
+    --text: #0b2540;
+    --border: #e2e8f0;
+    --light: #eef4fb;
+  }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+    padding: 20px;
+    color: var(--text);
+    line-height: 1.5;
+  }
+
+  .wrap {
+    max-width: 1100px;
+    margin: auto;
+  }
+
+  h1, h2 {
+    margin: 0 0 16px;
+    font-weight: 600;
+  }
+
+  h1 { font-size: 28px; }
+  h2 { font-size: 22px; color: #1e40af; }
+
+  .header {
+    text-align: center;
+    margin-bottom: 24px;
+  }
+
+  #search {
+    padding: 14px 16px;
+    width: 100%;
+    margin-bottom: 20px;
+    border-radius: 12px;
+    border: 1px solid #cbd5e1;
+    font-size: 16px;
+    box-sizing: border-box;
+    transition: all 0.2s;
+  }
+
+  #search:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(14, 165, 255, 0.2);
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--card);
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+  }
+
+  thead th {
+    background: var(--light);
+    padding: 14px 12px;
+    text-align: left;
+    font-weight: 600;
+    font-size: 14px;
+    color: #1e293b;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  tbody td {
+    padding: 14px 12px;
+    border-bottom: 1px solid var(--border);
+    font-size: 15px;
+  }
+
+  tbody tr:hover {
+    background: #f8fafc;
+  }
+
+  .linkbtn {
+    display: inline-block;
+    padding: 8px 14px;
+    background: var(--primary-dark);
+    color: white !important;
+    text-decoration: none;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 13px;
+    transition: background 0.2s;
+  }
+
+  .linkbtn:hover {
+    background: #1d4ed8;
+  }
+
+  .status {
+    text-align: center;
+    padding: 40px;
+    font-size: 18px;
+    color: #64748b;
+  }
+
+  .spinner {
+    border: 4px solid #f3f4f6;
+    border-top: 4px solid var(--primary);
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    animation: spin 1s linear infinite;
+    margin: 20px auto;
+  }
+
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+
+  .footer {
+    text-align: center;
+    margin-top: 40px;
+    color: #64748b;
+    font-size: 14px;
+  }
+
+  @media (max-width: 640px) {
+    table, thead, tbody, th, td, tr {
+      display: block;
+    }
+    
+    thead tr { display: none; }
+    
+    tr { 
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      margin-bottom: 12px;
+      padding: 8px;
+    }
+    
+    td {
+      border: none;
+      padding: 8px 0;
+      position: relative;
+      padding-left: 50%;
+    }
+    
+    td:before {
+      content: attr(data-label);
+      position: absolute;
+      left: 12px;
+      width: 45%;
+      font-weight: bold;
+      color: #475569;
+    }
+  }
 </style>
 </head>
 
 <body>
 <div class="wrap">
-  <h2>GCC VIN Spareparts Finder</h2>
-  <input id="search" type="search" placeholder="Search brand, model or VIN..." />
+  <div class="header">
+    <h1>GCC VIN Spare Parts Finder</h1>
+    <p>Instantly search thousands of GCC-spec vehicles & get direct Partsouq links</p>
+  </div>
 
-  <table>
+  <input id="search" type="search" placeholder="🔍 Search by Brand, Model, Year or VIN (e.g. Toyota, Camry, JTEBU..." autocomplete="off" />
+
+  <div id="status" class="status">
+    <div class="spinner"></div>
+    <div>Loading vehicle database...</div>
+  </div>
+
+  <table id="table" style="display:none">
     <thead>
       <tr>
         <th>Brand</th>
         <th>Model</th>
-        <th>VIN</th>
-        <th>Open</th>
+        <th>VIN Prefix</th>
+        <th>Parts Link</th>
       </tr>
     </thead>
     <tbody id="tableBody"></tbody>
   </table>
+
+  <div class="footer">
+    Data updated from <a href="https://github.com/AzarAndu/GCC-VIN-SPAREPARTS-APP" target="_blank">GitHub</a> 
+    • Powered by <a href="https://partsouq.com" target="_blank">Partsouq.com</a>
+  </div>
 </div>
 
 <script>
-// RAW CSV URL (your file)
+// Config
 const CSV_URL = "https://raw.githubusercontent.com/AzarAndu/GCC-VIN-SPAREPARTS-APP/main/data.csv";
-
 let MASTER = [];
 
-// Load CSV from GitHub
-async function loadCSV(){
-  const res = await fetch(CSV_URL);
-  const text = await res.text();
-  parseCSV(text);
-  renderTable(MASTER);
+// Proper CSV Parser (handles commas inside quotes if you upgrade later)
+function parseCSV(text) {
+  const lines = text.trim().split(/\r?\n/);
+  const result = [];
+
+  for (let line of lines) {
+    if (!line.trim()) continue;
+
+    // Simple but robust: split by comma, but respect quoted fields minimally
+    const regex = /(".*?"|[^",]+)(?=\s*,|\s*$)/g;
+    const parts = line.match(regex) || [];
+    
+    const row = parts.map(p => p.replace(/^"|"$/g, '').trim());
+    
+    if (row.length >= 3) {
+      result.push({
+        brand: row[0] || "",
+        model: row[1] || "",
+        vin: row[2] || ""
+      });
+    }
+  }
+  return result;
 }
 
-// Parse CSV string to objects
-function parseCSV(text){
-  const lines = text.split(/\r?\n/).filter(l=>l.trim());
-  MASTER = lines.map(line=>{
-    const parts = line.split(",");
-    return {
-      brand: parts[0]?.trim() || "",
-      model: parts[1]?.trim() || "",
-      vin: parts[2]?.trim() || ""
-    };
-  });
-}
+// Render table rows
+function renderTable(rows) {
+  const tbody = document.getElementById("tableBody");
+  tbody.innerHTML = "";
 
-// Render table
-function renderTable(rows){
-  const tb = document.getElementById("tableBody");
-  tb.innerHTML = "";
-  rows.forEach(r=>{
+  if (rows.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;color:#64748b;padding:40px;">No vehicles found matching your search.</td></tr>`;
+    return;
+  }
+
+  rows.forEach(r => {
     const tr = document.createElement("tr");
     tr.innerHTML = `
-      <td>${r.brand}</td>
-      <td>${r.model}</td>
-      <td>${r.vin}</td>
-      <td>
-        ${r.vin ? `<a class="linkbtn" target="_blank" href="https://partsouq.com/en/search/all?q=${r.vin}">OPEN</a>` : ""}
+      <td data-label="Brand">${escapeHtml(r.brand)}</td>
+      <td data-label="Model">${escapeHtml(r.model)}</td>
+      <td data-label="VIN Prefix"><code>${escapeHtml(r.vin)}</code></td>
+      <td data-label="Parts">
+        ${r.vin ? `<a class="linkbtn" target="_blank" href="https://partsouq.com/en/search/all?q=${encodeURIComponent(r.vin)}">OPEN PARTS</a>` : '<span style="color:#94a3b8">—</span>'}
       </td>
     `;
-    tb.appendChild(tr);
+    tbody.appendChild(tr);
   });
 }
 
-// Search box filter
-document.getElementById("search").addEventListener("input", e=>{
-  const q = e.target.value.toLowerCase();
-  const filtered = MASTER.filter(r=>
-    (r.brand+" "+r.model+" "+r.vin).toLowerCase().includes(q)
-  );
-  renderTable(filtered);
+// Safe HTML escape
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+// Debounced search
+let searchTimeout;
+document.getElementById("search").addEventListener("input", e => {
+  clearTimeout(searchTimeout);
+  searchTimeout = setTimeout(() => {
+    const query = e.target.value.toLowerCase().trim();
+    const filtered = MASTER.filter(row => {
+      const text = `${row.brand} ${row.model} ${row.vin}`.toLowerCase();
+      return text.includes(query);
+    });
+    renderTable(filtered);
+  }, 200); // 200ms debounce = smooth + fast
 });
 
-// Start app
-loadCSV();
+// Load data
+async function loadData() {
+  const statusEl = document.getElementById("status");
+  const tableEl = document.getElementById("table");
+
+  try {
+    const res = await fetch(CSV_URL + "?t=" + Date.now()); // cache bust
+    if (!res.ok) throw new Error("Failed to load data");
+
+    const text = await res.text();
+    MASTER = parseCSV(text);
+
+    if (MASTER.length === 0) {
+      statusEl.innerHTML = "<div style='color:#ef4444'>⚠️ No data found in CSV file.</div>";
+      return;
+    }
+
+    statusEl.style.display = "none";
+    tableEl.style.display = "table";
+
+    renderTable(MASTER);
+
+    // Update counter
+    document.querySelector(".header p").innerHTML += 
+      ` • <strong>${MASTER.length.toLocaleString()} vehicles</strong> loaded`;
+      
+  } catch (err) {
+    console.error(err);
+    statusEl.innerHTML = `
+      <div style="color:#ef4444">❌ Failed to load data</div>
+      <p style="font-size:14px;margin-top:8px">
+        Check your internet connection or try again later.<br/>
+        <a href="${CSV_URL}" target="_blank">View raw file →</a>
+      </p>`;
+  }
+}
+
+// Start
+loadData();
 </script>
 </body>
 </html>

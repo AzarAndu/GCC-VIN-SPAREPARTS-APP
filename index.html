@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>VIN Parts Search — Simple App</title>
+<style>
+  :root{--bg:#0f1724;--card:#0b1220;--accent:#0ea5ff;--muted:#9aa7bf;--white:#e6eef7}
+  *{box-sizing:border-box;font-family:Inter,ui-sans-serif,system-ui,Segoe UI,Roboto,"Helvetica Neue",Arial}
+  body{margin:0;background:#f4f6f9;color:#0b2540;padding:22px}
+  .wrap{max-width:1100px;margin:0 auto}
+  header{display:flex;gap:12px;align-items:center;justify-content:space-between;margin-bottom:18px}
+  h1{font-size:20px;margin:0}
+  .controls{display:flex;gap:8px;align-items:center}
+  .btn{background:var(--accent);color:white;padding:8px 12px;border-radius:8px;border:0;cursor:pointer;font-weight:600}
+  .btn.ghost{background:transparent;border:1px solid #d1d9e6;color:#1f2b3a}
+  textarea{width:100%;min-height:120px;padding:10px;border-radius:8px;border:1px solid #d8e1ee;font-size:14px}
+  .toolbox{background:white;padding:12px;border-radius:10px;border:1px solid #e6edf6;margin-bottom:12px}
+  .row{display:flex;gap:8px;align-items:center}
+  select,input[type="search"]{padding:8px;border-radius:8px;border:1px solid #d8e1ee}
+  table{width:100%;border-collapse:collapse;background:white;border-radius:8px;overflow:hidden}
+  thead th{background:#f1f6fb;text-align:left;padding:10px;font-size:13px;color:#1f2b3a;border-bottom:1px solid #e6eef7}
+  tbody td{padding:9px;border-bottom:1px solid #f4f7fb;font-size:14px;color:#123}
+  tbody tr:nth-child(even){background:#fcfeff}
+  .linkbtn{display:inline-block;padding:6px 10px;border-radius:6px;background:#2563eb;color:#fff;text-decoration:none;font-weight:700}
+  .muted{color:var(--muted);font-size:13px}
+  .small{font-size:13px}
+  .flex-between{display:flex;justify-content:space-between;align-items:center;gap:8px}
+  .top-actions{display:flex;gap:8px;align-items:center}
+  .note{font-size:13px;color:#475569}
+  .file-input{display:none}
+  .import-row{display:flex;gap:8px;align-items:center;margin-bottom:8px}
+  .footer{margin-top:14px;color:#6b7a8f;font-size:13px}
+  @media (max-width:700px){header{flex-direction:column;align-items:flex-start;gap:12px}.row{flex-direction:column;align-items:stretch}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>VIN → Partsouq (Simple Table)</h1>
+    <div class="controls">
+      <button id="loadSample" class="btn">Load sample</button>
+      <button id="exportBtn" class="btn ghost">Export CSV</button>
+    </div>
+  </header>
+
+  <div class="toolbox">
+    <div class="import-row">
+      <div style="flex:1">
+        <label class="small">Paste your table (TAB or CSV). Columns order: Brand, Model, VIN (or multiple columns — parser will try to find VINs)</label>
+        <textarea id="pasteArea" placeholder="Paste dataset here (tab separated or CSV). Example: TOYOTA<TAB>COROLLA 2005<TAB>JTDER23..."></textarea>
+      </div>
+      <div style="width:200px">
+        <label class="small">Or upload CSV</label><br/>
+        <input id="csvFile" type="file" accept=".csv,text/csv" class="file-input"/>
+        <button id="chooseFile" class="btn ghost">Choose CSV</button>
+        <div style="margin-top:8px">
+          <label class="small">Filter by brand:</label><br/>
+          <select id="brandFilter"><option value="">All Brands</option></select>
+        </div>
+      </div>
+    </div>
+
+    <div class="row" style="margin-top:6px">
+      <div style="flex:1">
+        <input id="search" type="search" placeholder="Search model, VIN, brand..." style="width:100%"/>
+      </div>
+      <div>
+        <button id="parseBtn" class="btn">Parse & Show</button>
+      </div>
+    </div>
+    <div style="margin-top:8px" class="note">Tip: you can paste the rows exactly as in your sheet (tab-separated). The parser will try to detect VIN-looking strings (17 chars letters+digits) and map them into the VIN column.</div>
+  </div>
+
+  <div class="flex-between" style="margin-bottom:8px">
+    <div class="small muted" id="rowsInfo">No data loaded</div>
+    <div class="top-actions">
+      <label class="small muted">Click OPEN to search on Partsouq</label>
+    </div>
+  </div>
+
+  <div style="overflow:auto;max-height:560px">
+    <table id="dataTable">
+      <thead>
+        <tr><th>Brand</th><th>Model</th><th>VIN</th><th>Open</th></tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <div class="footer">
+    Built for you — paste your data and click Parse. Want Google Sheets sync later? I can add that next.
+  </div>
+</div>
+
+<script>
+/* Utilities */
+const vinRegex = /[A-HJ-NPR-Z0-9]{17}/i; // simple VIN pattern (17 chars)
+function normalizeRowParts(parts){
+  // trim all parts
+  return parts.map(s => (s||"").toString().trim());
+}
+function detectVinFromParts(parts){
+  for(let p of parts){
+    if(!p) continue;
+    const m = p.match(vinRegex);
+    if(m) return m[0].toUpperCase();
+  }
+  return "";
+}
+/* Parse pasted text (tab or comma separated) into rows */
+function parseTextToRows(text){
+  const lines = text.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
+  const rows = [];
+  for(let line of lines){
+    // try tab first
+    let parts = line.split(/\t/);
+    if(parts.length===1) parts = line.split(/,/) // maybe CSV
+    parts = normalizeRowParts(parts);
+    // try to detect vin
+    const vin = detectVinFromParts(parts) || "";
+    // Try to assign brand/model: assume brand is first part if it contains letters and not VIN
+    let brand = parts[0]||"";
+    let model = parts[1]||"";
+    // if first part is VIN, shift
+    if(vin && brand.match(vinRegex)) { brand = ""; model = ""; }
+    // If brand looks like all uppercase codes but not brand, make guess by length
+    rows.push({brand,model,vin,raw:parts});
+  }
+  return rows;
+}
+
+/* Render table */
+let MASTER = []; // full data
+function renderTable(list){
+  const tbody = document.querySelector("#dataTable tbody");
+  tbody.innerHTML = "";
+  for(const row of list){
+    const tr = document.createElement("tr");
+    const brandTd = document.createElement("td"); brandTd.textContent = row.brand || "";
+    const modelTd = document.createElement("td"); modelTd.textContent = row.model || (row.raw && row.raw.join(" | "));
+    const vinTd = document.createElement("td"); vinTd.textContent = row.vin || "";
+    const linkTd = document.createElement("td");
+    if(row.vin){
+      const a = document.createElement("a");
+      a.className = "linkbtn";
+      a.href = `https://partsouq.com/en/search/all?q=${encodeURIComponent(row.vin)}`;
+      a.target = "_blank";
+      a.rel = "noopener noreferrer";
+      a.textContent = "OPEN PARTSOUQ";
+      linkTd.appendChild(a);
+    } else {
+      const span = document.createElement("span");
+      span.className = "muted";
+      span.textContent = "No VIN found";
+      linkTd.appendChild(span);
+    }
+    tr.appendChild(brandTd); tr.appendChild(modelTd); tr.appendChild(vinTd); tr.appendChild(linkTd);
+    tbody.appendChild(tr);
+  }
+  document.getElementById("rowsInfo").textContent = `${list.length} rows shown`;
+  populateBrandFilter();
+}
+
+/* Filters */
+function populateBrandFilter(){
+  const sel = document.getElementById("brandFilter");
+  const brands = Array.from(new Set(MASTER.map(r=> (r.brand||"").toUpperCase()).filter(Boolean))).sort();
+  sel.innerHTML = '<option value="">All Brands</option>';
+  for(const b of brands){
+    const opt = document.createElement("option");
+    opt.value = b;
+    opt.textContent = b;
+    sel.appendChild(opt);
+  }
+}
+function applyFilterAndSearch(){
+  const q = (document.getElementById("search").value||"").toLowerCase().trim();
+  const brand = (document.getElementById("brandFilter").value||"").toLowerCase();
+  const filtered = MASTER.filter(r=>{
+    if(brand && (r.brand||"").toLowerCase()!=brand) return false;
+    if(!q) return true;
+    return ((r.brand||"")+" "+(r.model||"")+" "+(r.vin||"")+" "+(r.raw||[]).join(" ")).toLowerCase().includes(q);
+  });
+  renderTable(filtered);
+}
+
+/* CSV export */
+function exportCSV(rows){
+  const header = ["Brand","Model","VIN"];
+  const lines = [header.join(",")];
+  for(const r of rows){
+    const safe = v=>`"${(v||"").toString().replace(/"/g,'""')}"`;
+    lines.push([safe(r.brand),safe(r.model),safe(r.vin)].join(","));
+  }
+  const blob = new Blob([lines.join("\n")], {type:"text/csv"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = "vin_export.csv"; document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
+
+/* Handlers */
+document.getElementById("parseBtn").addEventListener("click", ()=>{
+  const txt = document.getElementById("pasteArea").value || "";
+  if(!txt) { alert("Paste your data first (tab-separated rows)."); return; }
+  const rows = parseTextToRows(txt);
+
+  // Try improve mapping: if some rows have brand empty but raw contains brand in first column, use it
+  MASTER = rows.map(r=>{
+    // If model is empty but raw has more than 1 cell, try pick second cell as model and detect vin
+    if(!r.vin){
+      // try to find any VIN in raw (already done). If not found, look for 3rd column maybe
+      // leave as-is
+    } else {
+      // ensure model/brand don't contain VIN
+      if(r.brand && r.brand.match(/[A-HJ-NPR-Z0-9]{10,}/i) && !r.model) r.brand = "";
+      if(!r.model && r.raw.length>1) r.model = r.raw[1];
+      if(!r.brand && r.raw.length>0) r.brand = r.raw[0];
+    }
+    return {brand: r.brand||"", model: r.model||"", vin: (r.vin||"").toUpperCase(), raw:r.raw||[]};
+  });
+  applyFilterAndSearch();
+});
+
+document.getElementById("search").addEventListener("input", applyFilterAndSearch);
+document.getElementById("brandFilter").addEventListener("change", applyFilterAndSearch);
+
+document.getElementById("chooseFile").addEventListener("click", ()=> document.getElementById("csvFile").click());
+document.getElementById("csvFile").addEventListener("change", async (ev)=>{
+  const f = ev.target.files[0]; if(!f) return;
+  const txt = await f.text();
+  document.getElementById("pasteArea").value = txt;
+  document.getElementById("parseBtn").click();
+});
+
+document.getElementById("exportBtn").addEventListener("click", ()=>{
+  // export currently filtered table
+  const q = (document.getElementById("search").value||"").toLowerCase().trim();
+  const brand = (document.getElementById("brandFilter").value||"").toLowerCase();
+  const rows = MASTER.filter(r=>{
+    if(brand && (r.brand||"").toLowerCase()!=brand) return false;
+    if(!q) return true;
+    return ((r.brand||"")+" "+(r.model||"")+" "+(r.vin||"")+" "+(r.raw||[]).join(" ")).toLowerCase().includes(q);
+  });
+  exportCSV(rows);
+});
+
+/* Load sample data from your pasted content (small sample) */
+document.getElementById("loadSample").addEventListener("click", ()=>{
+  const sample = `TOYOTA\tCOROLLA/ALTIS SED/WG FEB 2005\tJTDER23E350194819
+TOYOTA\tCAMRY/HYBRID 12/2019\t4T1C11AK9LU916586
+NISSAN\tALTIMA 2015 USA\t1N4AL3APXGN313598
+MITSUBISHI\tGALANT 2010-12\t4P3SRDJ1AAE802496
+HYUNDAI/KIA\tKIA FORTE 2019\t3KPF24AD8KE092398
+HONDA\tODESY -GENERAL 2013\t5KBRL5868DB701429
+MISC\tMAZ BT50\tMM7UN2363B0880133`;
+  document.getElementById("pasteArea").value = sample;
+  document.getElementById("parseBtn").click();
+});
+
+/* initial state */
+MASTER = [];
+renderTable([]);
+</script>
+</body>
+</html>
